@@ -1,0 +1,194 @@
+
+# Experiment 6: Transfer Learning using MobileNetV2
+
+# Import required libraries
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import matplotlib.pyplot as plt
+import numpy as np
+
+print("TensorFlow Version:", tf.__version__)
+
+# -----------------------------------------
+# Step A: Load Pre-trained CNN Model
+# -----------------------------------------
+
+# Load CIFAR-10 dataset
+(x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+
+class_names = [
+    'Airplane', 'Automobile', 'Bird', 'Cat', 'Deer',
+    'Dog', 'Frog', 'Horse', 'Ship', 'Truck'
+]
+
+# Resize images for MobileNetV2
+IMG_SIZE = 96
+
+x_train = tf.image.resize(x_train, (IMG_SIZE, IMG_SIZE))
+x_test = tf.image.resize(x_test, (IMG_SIZE, IMG_SIZE))
+
+# Convert images to MobileNetV2 input format
+x_train = keras.applications.mobilenet_v2.preprocess_input(x_train)
+x_test = keras.applications.mobilenet_v2.preprocess_input(x_test)
+
+# Load pre-trained MobileNetV2
+base_model = keras.applications.MobileNetV2(
+    input_shape=(IMG_SIZE, IMG_SIZE, 3),
+    include_top=False,
+    weights='imagenet'
+)
+
+print("\nPre-trained MobileNetV2 loaded successfully!")
+
+
+# -----------------------------------------
+# Step B: Freeze Lower Convolution Layers
+# -----------------------------------------
+
+base_model.trainable = False
+
+print("Base Model Layers Frozen")
+
+
+# -----------------------------------------
+# Step C: Add Custom Classifier
+# -----------------------------------------
+
+model = keras.Sequential([
+    layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3)),
+
+    base_model,
+
+    layers.GlobalAveragePooling2D(),
+
+    layers.Dense(128, activation='relu'),
+
+    layers.Dropout(0.3),
+
+    layers.Dense(10, activation='softmax')
+])
+
+# Compile model
+model.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=0.001),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Display model architecture
+model.summary()
+
+
+# -----------------------------------------
+# Step D: Train Custom Classifier
+# -----------------------------------------
+
+print("\nTraining Custom Classifier...")
+
+history = model.fit(
+    x_train,
+    y_train,
+    epochs=3,
+    batch_size=64,
+    validation_split=0.1
+)
+
+
+# -----------------------------------------
+# Step E: Fine-Tune the Model
+# -----------------------------------------
+
+print("\nFine-Tuning MobileNetV2...")
+
+# Unfreeze the base model
+base_model.trainable = True
+
+# Freeze all layers except the last 20
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
+
+# Keep Batch Normalization layers frozen
+for layer in base_model.layers:
+    if isinstance(layer, layers.BatchNormalization):
+        layer.trainable = False
+
+# Recompile using a small learning rate
+model.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=0.00001),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Fine-tune model
+history_fine = model.fit(
+    x_train,
+    y_train,
+    epochs=2,
+    batch_size=64,
+    validation_split=0.1
+)
+
+
+# -----------------------------------------
+# Evaluate Model Performance
+# -----------------------------------------
+
+test_loss, test_accuracy = model.evaluate(x_test, y_test)
+
+print("\nFinal Model Performance")
+print("Test Loss:", test_loss)
+print("Test Accuracy:", test_accuracy * 100, "%")
+
+
+# -----------------------------------------
+# Plot Accuracy and Loss
+# -----------------------------------------
+
+train_accuracy = history.history['accuracy'] + history_fine.history['accuracy']
+val_accuracy = history.history['val_accuracy'] + history_fine.history['val_accuracy']
+
+train_loss = history.history['loss'] + history_fine.history['loss']
+val_loss = history.history['val_loss'] + history_fine.history['val_loss']
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.plot(train_accuracy, label='Training Accuracy')
+plt.plot(val_accuracy, label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(train_loss, label='Training Loss')
+plt.plot(val_loss, label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+
+# -----------------------------------------
+# Predict an Image
+# -----------------------------------------
+
+predictions = model.predict(x_test[:1])
+
+predicted_class = np.argmax(predictions[0])
+actual_class = y_test[0][0]
+
+print("\nPredicted Object:", class_names[predicted_class])
+print("Actual Object:", class_names[actual_class])
+
+# Display image
+display_image = (x_test[0] + 1.0) / 2.0
+
+plt.imshow(np.clip(display_image, 0, 1))
+plt.title("Predicted: " + class_names[predicted_class])
+plt.axis('off')
+plt.show()

@@ -1,0 +1,137 @@
+
+# Experiment 3: Image Classification Model using TensorFlow and Keras
+
+# Import required libraries
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import matplotlib.pyplot as plt
+import numpy as np
+
+# -----------------------------------------
+# Stage A: Loading and Preprocessing Data
+# -----------------------------------------
+
+# Load CIFAR-10 dataset
+(x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+
+# Class names
+class_names = [
+    'Airplane', 'Automobile', 'Bird', 'Cat', 'Deer',
+    'Dog', 'Frog', 'Horse', 'Ship', 'Truck'
+]
+
+print("Training Data:", x_train.shape)
+print("Testing Data:", x_test.shape)
+
+# Normalize image data
+x_train = x_train.astype('float32') / 255.0
+x_test = x_test.astype('float32') / 255.0
+
+# Display sample images
+plt.figure(figsize=(10, 5))
+
+for i in range(10):
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(x_train[i])
+    plt.title(class_names[y_train[i][0]])
+    plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+
+# -----------------------------------------
+# Stage B: Defining Model Architecture
+# -----------------------------------------
+
+model = keras.Sequential([
+    layers.Input(shape=(32, 32, 3)),
+
+    layers.Conv2D(32, (3, 3), activation='relu'),
+    layers.MaxPooling2D((2, 2)),
+
+    layers.Conv2D(64, (3, 3), activation='relu'),
+    layers.MaxPooling2D((2, 2)),
+
+    layers.Flatten(),
+
+    layers.Dense(128, activation='relu'),
+    layers.Dense(10, activation='softmax')
+])
+
+# Display model architecture
+model.summary()
+
+# Compile model
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+
+# -----------------------------------------
+# Stage C: Training the Model
+# -----------------------------------------
+
+print("\nTraining Image Classification Model...")
+
+history = model.fit(
+    x_train,
+    y_train,
+    epochs=5,
+    batch_size=64,
+    validation_split=0.1
+)
+
+
+# -----------------------------------------
+# Stage D: Estimating Model Performance
+# -----------------------------------------
+
+test_loss, test_accuracy = model.evaluate(x_test, y_test)
+
+print("\nModel Performance")
+print("Test Loss:", test_loss)
+print("Test Accuracy:", test_accuracy * 100, "%")
+
+
+# Plot Accuracy and Loss
+plt.figure(figsize=(12, 5))
+
+# Accuracy Graph
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+# Loss Graph
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+
+# Predict a sample image
+predictions = model.predict(x_test[:1])
+
+predicted_class = np.argmax(predictions[0])
+actual_class = y_test[0][0]
+
+print("\nPredicted Class:", class_names[predicted_class])
+print("Actual Class:", class_names[actual_class])
+
+plt.imshow(x_test[0])
+plt.title("Predicted: " + class_names[predicted_class])
+plt.axis('off')
+plt.show()

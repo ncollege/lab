@@ -1,0 +1,159 @@
+
+# Experiment 4: Anomaly Detection Using Autoencoder
+
+# a. Import required libraries
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import numpy as np
+import matplotlib.pyplot as plt
+
+print("TensorFlow Version:", tf.__version__)
+
+# b. Load the MNIST dataset
+(x_train, y_train), (x_test, y_test) = keras.datasets.mnist.load_data()
+
+# Normalize data
+x_train = x_train.astype("float32") / 255.0
+x_test = x_test.astype("float32") / 255.0
+
+# Select only digit 0 as normal data
+x_train_normal = x_train[y_train == 0]
+x_test_normal = x_test[y_test == 0]
+
+# Select other digits as anomalies
+x_test_anomaly = x_test[y_test != 0]
+
+# Combine normal and anomaly data for testing
+x_test_combined = np.concatenate(
+    [x_test_normal, x_test_anomaly]
+)
+
+# Create labels: 0 = Normal, 1 = Anomaly
+y_test_combined = np.concatenate([
+    np.zeros(len(x_test_normal)),
+    np.ones(len(x_test_anomaly))
+])
+
+# Flatten images
+x_train_normal = x_train_normal.reshape(-1, 784)
+x_test_combined = x_test_combined.reshape(-1, 784)
+
+print("Normal Training Data:", x_train_normal.shape)
+print("Testing Data:", x_test_combined.shape)
+
+
+# c. Encoder: Convert input into latent representation
+input_layer = keras.Input(shape=(784,))
+
+encoded = layers.Dense(128, activation='relu')(input_layer)
+encoded = layers.Dense(64, activation='relu')(encoded)
+
+latent = layers.Dense(32, activation='relu')(encoded)
+
+# d. Decoder: Reconstruct original input
+decoded = layers.Dense(64, activation='relu')(latent)
+decoded = layers.Dense(128, activation='relu')(decoded)
+
+output_layer = layers.Dense(784, activation='sigmoid')(decoded)
+
+# Build Autoencoder
+autoencoder = keras.Model(input_layer, output_layer)
+
+# Display model
+autoencoder.summary()
+
+
+# e. Compile model
+autoencoder.compile(
+    optimizer='adam',
+    loss='mse',
+    metrics=['mae']
+)
+
+# Train Autoencoder
+print("\nTraining Autoencoder...")
+
+history = autoencoder.fit(
+    x_train_normal,
+    x_train_normal,
+    epochs=10,
+    batch_size=128,
+    validation_split=0.1,
+    shuffle=True
+)
+
+# Reconstruct test images
+reconstructed = autoencoder.predict(x_test_combined)
+
+# Calculate reconstruction error
+reconstruction_error = np.mean(
+    np.square(x_test_combined - reconstructed),
+    axis=1
+)
+
+# Set anomaly threshold using training reconstruction errors
+train_reconstructed = autoencoder.predict(x_train_normal)
+
+train_error = np.mean(
+    np.square(x_train_normal - train_reconstructed),
+    axis=1
+)
+
+threshold = np.percentile(train_error, 95)
+
+# Detect anomalies
+predictions = (reconstruction_error > threshold).astype(int)
+
+# Evaluate performance
+accuracy = np.mean(predictions == y_test_combined)
+
+print("\nAnomaly Detection Results")
+print("Reconstruction Threshold:", threshold)
+print("Accuracy:", accuracy * 100, "%")
+
+# Display normal and anomaly counts
+print("Normal Samples:", np.sum(predictions == 0))
+print("Anomaly Samples:", np.sum(predictions == 1))
+
+# Plot training loss
+plt.figure(figsize=(8, 4))
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Autoencoder Training Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Display original and reconstructed images
+plt.figure(figsize=(10, 4))
+
+for i in range(5):
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(x_test_combined[i].reshape(28, 28), cmap='gray')
+    plt.title("Original")
+    plt.axis('off')
+
+    plt.subplot(2, 5, i + 6)
+    plt.imshow(reconstructed[i].reshape(28, 28), cmap='gray')
+    plt.title("Reconstructed")
+    plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+# Display anomaly detection results
+plt.figure(figsize=(8, 4))
+plt.hist(reconstruction_error[y_test_combined == 0],
+         bins=40, alpha=0.6, label='Normal')
+
+plt.hist(reconstruction_error[y_test_combined == 1],
+         bins=40, alpha=0.6, label='Anomaly')
+
+plt.axvline(threshold, linestyle='--', label='Threshold')
+plt.title('Reconstruction Error Distribution')
+plt.xlabel('Reconstruction Error')
+plt.ylabel('Number of Images')
+plt.legend()
+plt.show()

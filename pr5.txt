@@ -1,0 +1,134 @@
+
+# Experiment 5: Continuous Bag of Words (CBOW) Model
+
+# Import required libraries
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import skipgrams
+
+# ----------------------------------
+# Stage A: Data Preparation
+# ----------------------------------
+
+# Sample dataset
+sentences = [
+    "deep learning is very powerful",
+    "machine learning is interesting",
+    "deep learning uses neural networks",
+    "neural networks learn from data",
+    "machine learning uses algorithms"
+]
+
+# Tokenize sentences
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(sentences)
+
+vocab_size = len(tokenizer.word_index) + 1
+
+print("Vocabulary:", tokenizer.word_index)
+print("Vocabulary Size:", vocab_size)
+
+
+# ----------------------------------
+# Stage B: Generate Training Data
+# ----------------------------------
+
+window_size = 2
+
+X = []
+y = []
+
+for sentence in sentences:
+
+    words = tokenizer.texts_to_sequences([sentence])[0]
+
+    for i in range(window_size, len(words) - window_size):
+
+        context = (
+            words[i-window_size:i] +
+            words[i+1:i+window_size+1]
+        )
+
+        target = words[i]
+
+        X.append(context)
+        y.append(target)
+
+X = np.array(X)
+y = np.array(y)
+
+print("\nTraining Data:")
+print("Context Words Shape:", X.shape)
+print("Target Words Shape:", y.shape)
+
+
+# ----------------------------------
+# Stage C: Train CBOW Model
+# ----------------------------------
+
+embedding_dim = 50
+
+model = keras.Sequential([
+    layers.Input(shape=(2 * window_size,)),
+    layers.Embedding(vocab_size, embedding_dim),
+    layers.GlobalAveragePooling1D(),
+    layers.Dense(vocab_size, activation='softmax')
+])
+
+# Compile model
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Display model
+model.summary()
+
+# Train model
+history = model.fit(
+    X,
+    y,
+    epochs=100,
+    verbose=1
+)
+
+
+# ----------------------------------
+# Stage D: Output
+# ----------------------------------
+
+# Reverse word dictionary
+reverse_word_index = {
+    index: word
+    for word, index in tokenizer.word_index.items()
+}
+
+# Predict target word
+test_context = X[0]
+
+prediction = model.predict(
+    np.array([test_context]),
+    verbose=0
+)
+
+predicted_word_index = np.argmax(prediction)
+
+print("\nContext Words:")
+
+for word_id in test_context:
+    print(reverse_word_index[word_id])
+
+print("\nActual Target Word:",
+      reverse_word_index[y[0]])
+
+print("Predicted Target Word:",
+      reverse_word_index[predicted_word_index])
+
+# Get word embeddings
+embeddings = model.layers[0].get_weights()[0]
+
+print("\nWord Embedding Shape:", embeddings.shape)
